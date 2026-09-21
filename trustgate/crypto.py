@@ -21,6 +21,5 @@ def verify(public_key: Ed25519PublicKey, message: bytes, signature: bytes) -> bo
     try:
         public_key.verify(signature, message)
         return True
-    except:
-        InvalidSignature
+    except InvalidSignature:
         return False
