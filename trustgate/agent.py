@@ -1,3 +1,4 @@
+from trustgate.approval import approval_valid
 from trustgate.mandate import purchase_allowed
 from trustgate.request import create_request, sign_request, request_valid, NonceStore
 from trustgate.risk import ALLOW, CHALLENGE, DENY, decide
@@ -7,7 +8,8 @@ class AgentLoop:
     """Runs a shopping agent whose proposals must clear the trust gate."""
 
     def __init__(self, llm, risk_provider, mandate, agent_private_key,
-                 agent_public_key, audit, nonce_store=None, approver=None):
+                 agent_public_key, audit, nonce_store=None, approver=None,
+                 human_public_key=None):
         self.llm = llm
         self.risk = risk_provider
         self.mandate = mandate
@@ -16,6 +18,7 @@ class AgentLoop:
         self.audit = audit
         self.nonce_store = nonce_store or NonceStore()
         self.approver = approver
+        self.human_public_key = human_public_key
         self.history = []
 
     def run(self, goal: str, catalog: list[dict], max_steps: int = 5) -> list[dict]:
@@ -50,9 +53,17 @@ class AgentLoop:
         decision = decide(score)
 
         if decision == CHALLENGE:
-            if self.approver and self.approver.approve(request):
-                return self._finish(request, ALLOW, "human_approved", score)
-            return self._finish(request, DENY, "human_declined", score)
+            if self.approver is None:
+                return self._finish(request, DENY, "no_approver", score)
+
+            approval_sig = self.approver.approve(request)
+            if approval_sig is None:
+                return self._finish(request, DENY, "human_declined", score)
+
+            if not approval_valid(self.human_public_key, request, approval_sig):
+                return self._finish(request, DENY, "invalid_approval", score)
+
+            return self._finish(request, ALLOW, "human_approved", score)
 
         reason = "within_policy" if decision == ALLOW else "risk_too_high"
         return self._finish(request, decision, reason, score)
