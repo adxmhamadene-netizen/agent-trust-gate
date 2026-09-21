@@ -12,5 +12,5 @@ A shopping agent that runs on its own but can't spend beyond what it's been trus
 - [ ] PR 5: Audit log
 - [ ] PR 6: Agent loop
 - [ ] PR 7: Human-in-the-loop approval
-- [ ] PR 8: Attack suite + CI
+- [ ] PR 8: Attack suite
 - [ ] PR 9: Architecture + writeup
