@@ -12,7 +12,7 @@ WEIGHTS = {"cap_ratio": 0.5, "new_merchant": 0.3, "velocity": 0.2}
 
 class RiskProvider:
     """Interface: every risk scorer must have a score() method.
-    In production, an external trust signal (e.g. Experian's Agent Trust) plugs in here."""
+    In production, an external trust signal"""
 
     def score(self, request: dict, mandate: dict, history: list[dict]) -> float:
         """Return a risk score from 0.0 (safe) to 1.0 (risky)."""
