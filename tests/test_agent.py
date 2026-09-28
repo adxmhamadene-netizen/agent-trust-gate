@@ -8,6 +8,7 @@ from trustgate.crypto import generate_keypair
 from trustgate.llm import ScriptedLLMClient
 from trustgate.mandate import create_mandate, sign_mandate
 from trustgate.risk import ALLOW, DENY, LocalRiskProvider
+from trustgate.gate import Gate
 
 
 @pytest.fixture
@@ -26,23 +27,21 @@ def setup(tmp_path):
 
 def build(setup, proposals, approver=None):
     private_key, public_key, mandate, audit, human_public, mandate_signature = setup
-    return AgentLoop(
-        llm=ScriptedLLMClient(proposals),
+    gate = Gate(
         risk_provider=LocalRiskProvider(),
         mandate=mandate,
-        agent_private_key=private_key,
         agent_public_key=public_key,
         audit=audit,
         approver=approver,
         human_public_key = human_public,
         mandate_signature= mandate_signature
-
-    ), audit
+    )
+    return AgentLoop(ScriptedLLMClient(proposals), gate, private_key), audit
 
 
 def test_small_known_purchase_is_allowed(setup):
     agent, _ = build(setup, [{"amount_cents": 500, "merchant": "cafe"}])
-    agent.history.append({"merchant": "cafe", "timestamp": time.time() - 7200})
+    agent.gate.history.append({"merchant": "cafe", "timestamp": time.time() - 7200})
     outcomes = agent.run("buy coffee", [])
     assert outcomes[0]["decision"] == ALLOW
 

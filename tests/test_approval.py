@@ -10,6 +10,7 @@ from trustgate.llm import ScriptedLLMClient
 from trustgate.mandate import create_mandate, sign_mandate
 from trustgate.request import request_bytes
 from trustgate.risk import ALLOW, DENY, LocalRiskProvider
+from trustgate.gate import Gate
 
 
 # a new merchant at 80% of cap lands in the CHALLENGE band:
@@ -27,17 +28,17 @@ def build(tmp_path, proposals, approver=None, human_keys=None):
         expires_at=time.time() + 3600,
     )
     audit = AuditLog(tmp_path / "audit.jsonl")
-    agent = AgentLoop(
-        llm=ScriptedLLMClient(proposals),
+    gate = Gate(
         risk_provider=LocalRiskProvider(),
         mandate=mandate,
-        agent_private_key=agent_priv,
         agent_public_key=agent_pub,
         audit=audit,
         approver=approver,
         human_public_key=human_public,
-        mandate_signature=sign_mandate(human_private, mandate),
+        mandate_signature=sign_mandate(human_private, mandate)
+
     )
+    agent = AgentLoop(ScriptedLLMClient(proposals), gate, agent_priv)
     return agent, audit
 
 
