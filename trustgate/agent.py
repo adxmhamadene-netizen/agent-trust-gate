@@ -1,5 +1,5 @@
 from trustgate.approval import approval_valid
-from trustgate.mandate import purchase_allowed
+from trustgate.mandate import purchase_allowed, verify_mandate
 from trustgate.request import create_request, sign_request, request_valid, NonceStore
 from trustgate.risk import ALLOW, CHALLENGE, DENY, decide
 
@@ -9,7 +9,7 @@ class AgentLoop:
 
     def __init__(self, llm, risk_provider, mandate, agent_private_key,
                  agent_public_key, audit, nonce_store=None, approver=None,
-                 human_public_key=None):
+                 human_public_key=None, mandate_signature = None):
         self.llm = llm
         self.risk = risk_provider
         self.mandate = mandate
@@ -20,6 +20,7 @@ class AgentLoop:
         self.approver = approver
         self.human_public_key = human_public_key
         self.history = []
+        self.mandate_signature = mandate_signature
 
     def run(self, goal: str, catalog: list[dict], max_steps: int = 5) -> list[dict]:
         outcomes = []
@@ -44,6 +45,9 @@ class AgentLoop:
         if not request_valid(self.agent_public_key, request, signature,
                              self.nonce_store):
             return self._finish(request, DENY, "invalid_request", None)
+
+        if (self.human_public_key is None or self.mandate_signature is None or not verify_mandate(self.human_public_key, self.mandate, self.mandate_signature)):
+            return self._finish(request, DENY, "invalid_mandate", None)
 
         if not purchase_allowed(self.mandate, request["amount_cents"],
                                 request["merchant"]):
