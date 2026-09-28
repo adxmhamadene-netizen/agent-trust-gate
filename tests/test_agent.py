@@ -6,24 +6,26 @@ from trustgate.agent import AgentLoop
 from trustgate.audit import AuditLog
 from trustgate.crypto import generate_keypair
 from trustgate.llm import ScriptedLLMClient
-from trustgate.mandate import create_mandate
+from trustgate.mandate import create_mandate, sign_mandate
 from trustgate.risk import ALLOW, DENY, LocalRiskProvider
 
 
 @pytest.fixture
 def setup(tmp_path):
     private_key, public_key = generate_keypair()
+    human_private , human_public = generate_keypair()
     mandate = create_mandate(
         max_amount_cents=5000,
         allowed_merchants=["cafe", "bookstore"],
         expires_at=time.time() + 3600,
     )
+    mandate_signature = sign_mandate(human_private, mandate)
     audit = AuditLog(tmp_path / "audit.jsonl")
-    return private_key, public_key, mandate, audit
+    return private_key, public_key, mandate, audit, human_public, mandate_signature
 
 
 def build(setup, proposals, approver=None):
-    private_key, public_key, mandate, audit = setup
+    private_key, public_key, mandate, audit, human_public, mandate_signature = setup
     return AgentLoop(
         llm=ScriptedLLMClient(proposals),
         risk_provider=LocalRiskProvider(),
@@ -32,6 +34,9 @@ def build(setup, proposals, approver=None):
         agent_public_key=public_key,
         audit=audit,
         approver=approver,
+        human_public_key = human_public,
+        mandate_signature= mandate_signature
+
     ), audit
 
 

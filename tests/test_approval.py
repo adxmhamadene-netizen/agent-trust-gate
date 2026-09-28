@@ -7,12 +7,19 @@ from trustgate.approval import AutoApprover, approval_valid
 from trustgate.audit import AuditLog
 from trustgate.crypto import generate_keypair, sign
 from trustgate.llm import ScriptedLLMClient
-from trustgate.mandate import create_mandate
+from trustgate.mandate import create_mandate, sign_mandate
 from trustgate.request import request_bytes
 from trustgate.risk import ALLOW, DENY, LocalRiskProvider
 
 
-def build(tmp_path, proposals, approver=None, human_public_key=None):
+# a new merchant at 80% of cap lands in the CHALLENGE band:
+# cap_ratio 0.8*0.5 + new_merchant 1.0*0.3 = 0.70
+CHALLENGE_PROPOSAL = [{"amount_cents": 4000, "merchant": "bookstore"}]
+
+def build(tmp_path, proposals, approver=None, human_keys=None):
+    if human_keys is None:
+        human_keys = generate_keypair()
+    human_private, human_public = human_keys
     agent_priv, agent_pub = generate_keypair()
     mandate = create_mandate(
         max_amount_cents=5000,
@@ -28,21 +35,17 @@ def build(tmp_path, proposals, approver=None, human_public_key=None):
         agent_public_key=agent_pub,
         audit=audit,
         approver=approver,
-        human_public_key=human_public_key,
+        human_public_key=human_public,
+        mandate_signature=sign_mandate(human_private, mandate),
     )
     return agent, audit
-
-
-# a new merchant at 80% of cap lands in the CHALLENGE band:
-# cap_ratio 0.8*0.5 + new_merchant 1.0*0.3 = 0.70
-CHALLENGE_PROPOSAL = [{"amount_cents": 4000, "merchant": "bookstore"}]
 
 
 def test_approved_challenge_becomes_allow(tmp_path):
     human_priv, human_pub = generate_keypair()
     agent, audit = build(tmp_path, CHALLENGE_PROPOSAL,
                          approver=AutoApprover(human_priv, decision=True),
-                         human_public_key=human_pub)
+                         human_keys=(human_priv, human_pub))
     outcomes = agent.run("buy a book", [])
     assert outcomes[0]["decision"] == ALLOW
     assert outcomes[0]["reason"] == "human_approved"
@@ -52,7 +55,7 @@ def test_declined_challenge_is_denied(tmp_path):
     human_priv, human_pub = generate_keypair()
     agent, _ = build(tmp_path, CHALLENGE_PROPOSAL,
                      approver=AutoApprover(human_priv, decision=False),
-                     human_public_key=human_pub)
+                     human_keys=(human_priv, human_pub))
     outcomes = agent.run("buy a book", [])
     assert outcomes[0]["decision"] == DENY
     assert outcomes[0]["reason"] == "human_declined"
@@ -66,11 +69,11 @@ def test_no_approver_denies(tmp_path):
 
 
 def test_forged_approval_is_rejected(tmp_path):
-    _, human_pub = generate_keypair()
+    human_priv, human_pub = generate_keypair()
     attacker_priv, _ = generate_keypair()
     agent, _ = build(tmp_path, CHALLENGE_PROPOSAL,
                      approver=AutoApprover(attacker_priv, decision=True),
-                     human_public_key=human_pub)
+                     human_keys=(human_priv, human_pub))
     outcomes = agent.run("buy a book", [])
     assert outcomes[0]["decision"] == DENY
     assert outcomes[0]["reason"] == "invalid_approval"
