@@ -9,6 +9,7 @@ from trustgate.llm import ScriptedLLMClient
 from trustgate.mandate import create_mandate, sign_mandate
 from trustgate.request import create_request, sign_request, request_valid, NonceStore
 from trustgate.risk import LocalRiskProvider, DENY
+from trustgate.gate import Gate
 
 CAP_CENTS = 5000
 GOOD_MERCHANT = "good-store"
@@ -27,16 +28,15 @@ def make_loop(tmp_path):
         human_private, human_public = generate_keypair()
         mandate = mandate or default_mandate() 
         audit = AuditLog(tmp_path / "audit.jsonl")
-        loop = AgentLoop(
-            llm=ScriptedLLMClient(proposals),
-            risk_provider=LocalRiskProvider(),
-            mandate=mandate,
-            agent_private_key=agent_private,
+        gate = Gate(
             agent_public_key=agent_public,
-            human_public_key= human_public,
-            mandate_signature= sign_mandate(human_private, mandate),
+            human_public_key=human_public,
+            mandate=mandate,
+            mandate_signature=sign_mandate(human_private, mandate),
+            risk_provider=LocalRiskProvider(),
             audit=audit,
         )
+        loop = AgentLoop(ScriptedLLMClient(proposals), gate, agent_private)
         return loop, audit
     return _make
 
@@ -99,7 +99,7 @@ def test_expired_mandate_denied(make_loop):
 def test_tampered_mandate_denied(make_loop):
     """Raising the cap after the human signed breaks the mandate signature."""
     loop, audit = make_loop([{"amount_cents": 9000, "merchant": GOOD_MERCHANT}])
-    loop.mandate["max_amount_cents"] = 900000  # tampered after signing
+    loop.gate.mandate["max_amount_cents"] = 900000  # tampered after signing
 
     outcomes = loop.run("buy something", [])
 
