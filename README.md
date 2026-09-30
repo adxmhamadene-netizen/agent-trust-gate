@@ -1,4 +1,5 @@
 # agent-trust-gate
+[![tests](https://github.com/adxmhamadene-netizen/agent-trust-gate/actions/workflows/test.yml/badge.svg)](https://github.com/adxmhamadene-netizen/agent-trust-gate/actions/workflows/test.yml)
 
 > Agents should be accountable, not just capable: the model proposes, deterministic code decides, and a human approves anything high-stakes.
 
